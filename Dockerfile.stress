@@ -1,0 +1,19 @@
+FROM ocaml/opam:debian-11-ocaml-4.13@sha256:fe25836078456e1691b59e28b8fdf1a1feb34f122c9810642282d5d9530fb4ef AS build
+RUN sudo apt-get update && sudo apt-get install libev-dev capnproto m4 pkg-config libsqlite3-dev libgmp-dev -y --no-install-recommends
+RUN cd ~/opam-repository && git pull origin -q master && git reset --hard d811dfbb1b8dd5497c24d29bb56a7b7cb5d6a25f && opam update
+COPY --chown=opam ocluster-api.opam ocluster.opam /src/
+COPY --chown=opam obuilder/obuilder.opam obuilder/obuilder-spec.opam /src/obuilder/
+RUN opam pin -yn /src/obuilder/
+WORKDIR /src
+RUN opam install -y --deps-only .
+ADD --chown=opam . .
+RUN opam exec -- dune subst
+RUN opam config exec -- dune build ./_build/default/stress/stress.exe
+
+FROM debian:11
+RUN apt-get update && apt-get install docker.io libev4 curl gnupg2 git libsqlite3-dev ca-certificates netbase -y --no-install-recommends
+# WORKDIR /var/lib/ocluster-worker
+# ENTRYPOINT ["/usr/local/bin/stress.exe"]
+ENV PROGRESS_NO_TRUNC=1
+COPY --from=build /src/_build/default/stress/stress.exe /usr/local/bin/
+RUN mkdir /usr/local/bin/capnp-secrets
